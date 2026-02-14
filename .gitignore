@@ -1,0 +1,15 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+.idea
+.venv
+card_images
+pdfs/
+.vscode
+data_sets/
+test_data.txt
