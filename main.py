@@ -23,9 +23,11 @@ from requests import get
 CARD_WIDTH_IN = Decimal("2.5")
 CARD_HEIGHT_IN = Decimal("3.5")
 
+ONE_INCH_MM = Decimal("25.4") # 1 inch to mm conversion.
+
 # Convert inches to mm (1 inch = 25.4 mm)
-CARD_WIDTH_MM = Decimal("63.5")  # CARD_WIDTH_IN * 25.4
-CARD_HEIGHT_MM = Decimal("88.9")  # CARD_HEIGHT_IN * 25.4
+CARD_WIDTH_MM = CARD_WIDTH_IN * ONE_INCH_MM # Decimal("63.5")  # CARD_WIDTH_IN * 25.4
+CARD_HEIGHT_MM = CARD_HEIGHT_IN * ONE_INCH_MM # Decimal("88.9")  # CARD_HEIGHT_IN * 25.4
 
 # Gap between cards
 GAP_MM = Decimal("0.2")
@@ -147,6 +149,12 @@ def store_upscaled_image(image_url: str, image_path: str):
     upscaled = img.resize(new_size, resample=Image.Resampling.LANCZOS)
 
     upscaled.save(image_path)
+
+def upscale_image(image_path: str, new_name: str): 
+    with Image.open(image_path) as img:
+        new_size = (img.width * 2, img.height * 2)
+        upscaled = img.resize(new_size, resample=Image.Resampling.LANCZOS)
+        upscaled.save(new_name)
 
 
 class ScryfallCard:
@@ -767,23 +775,36 @@ def generate_backs_pdf():
 
     y = START_Y + 0 * (CARD_HEIGHT_MM + GAP_MM)
 
+    print(f"effective width & height {pdf_doc.epw}, {pdf_doc.eph}")
+    print(f"hard-coded width & height {PAGE_WIDTH_MM}, {PAGE_HEIGHT_MM}")
+
     for row in range(3):
         x = START_X + 0 * CARD_WIDTH_MM
         for col in range(3):
-            image_path: str = "card_images/back_upscaled.jpg"
+            image_path: str = "./card_images/mtg_card_back_upscaled.png"
 
+            back_x = PAGE_WIDTH_MM - (x + CARD_WIDTH_MM)
+            f_back_x = float(back_x)
+
+            print(f"adding back image at ({f_back_x}, {y})")
             pdf_doc.image(
                 image_path,
-                x=float(x),
+                x=float(f_back_x),
                 y=float(y),
                 w=float(CARD_WIDTH_MM),
                 h=float(CARD_HEIGHT_MM),
+                keep_aspect_ratio=False
             )
             x = x + CARD_WIDTH_MM + (GAP_MM if col < 2 else Decimal(0))
 
         y = y + CARD_HEIGHT_MM + (GAP_MM if row < 2 else Decimal(0))
 
     pdf_doc.output("./pdfs/card_backs.pdf")
+
+
+@cli.command("upscale_card_back")
+def upscale_card_back(): 
+    upscale_image("./card_images/mtg_card_back.png", "./card_images/mtg_card_back_upscaled.png")
 
 
 if __name__ == "__main__":
