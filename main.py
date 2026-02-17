@@ -14,7 +14,7 @@ import click
 import httpx
 import pyperclip
 from fpdf import FPDF
-from PIL import Image
+from PIL import Image, ImageEnhance
 from requests import get
 
 # Define card dimensions in inches and convert to mm
@@ -143,17 +143,31 @@ class ScryfallResponse(TypedDict):
 def store_upscaled_image(image_url: str, image_path: str):
     resp = get(image_url)
 
-    img = Image.open(BytesIO(resp.content))
-    new_size = (img.width * 2, img.height * 2)
+    with Image.open(BytesIO(resp.content)) as img:
+        new_size = (img.width * 4, img.height * 4)
 
-    upscaled = img.resize(new_size, resample=Image.Resampling.LANCZOS)
-
-    upscaled.save(image_path)
-
-def upscale_image(image_path: str, new_name: str): 
-    with Image.open(image_path) as img:
-        new_size = (img.width * 2, img.height * 2)
         upscaled = img.resize(new_size, resample=Image.Resampling.LANCZOS)
+
+        color_enhance = ImageEnhance.Color(upscaled)
+        upscaled = color_enhance.enhance(1.2)
+
+        sharpness_enhance = ImageEnhance.Sharpness(upscaled)
+        upscaled = sharpness_enhance.enhance(1.2)
+
+        upscaled.save(image_path)
+
+def upscale_image(image_path: str, new_name: str):
+    with Image.open(image_path) as img:
+        new_size = (img.width * 4, img.height * 4)
+
+        upscaled = img.resize(new_size, resample=Image.Resampling.LANCZOS)
+
+        color_enhance = ImageEnhance.Color(upscaled)
+        upscaled = color_enhance.enhance(1.2)
+
+        sharpness_enhance = ImageEnhance.Sharpness(upscaled)
+        upscaled = sharpness_enhance.enhance(1.2)
+
         upscaled.save(new_name)
 
 
@@ -286,7 +300,7 @@ def extract_collector_number(card_name: str) -> tuple[str | None, str]:
 
 
 class OracleDB:
-    def __init__(self, data_set_path="./data_sets/default-cards-20260209100735.json"):
+    def __init__(self, data_set_path="./data_sets/default-cards-20260215221934.json"):
         click.echo(f"Opening Oracle Card DB at {data_set_path}")
 
         with open(data_set_path, encoding="utf-8") as json_file:
