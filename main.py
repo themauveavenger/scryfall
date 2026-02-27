@@ -1,5 +1,6 @@
 import glob
 import json
+import os
 import random
 import re
 from dataclasses import dataclass
@@ -110,6 +111,8 @@ type Layout = Literal[
     "prototype",
     "mutate",
     "split",
+    "reversible_card",
+    "double_faced_token"
 ]
 
 
@@ -156,17 +159,18 @@ def store_upscaled_image(image_url: str, image_path: str):
 
         upscaled.save(image_path)
 
-def upscale_image(image_path: str, new_name: str):
+def upscale_image(image_path: str, new_name: str, multiplier: int = 2, enhance_passes = 2):
     with Image.open(image_path) as img:
-        new_size = (img.width * 4, img.height * 4)
+        new_size = (img.width * multiplier, img.height * multiplier)
 
         upscaled = img.resize(new_size, resample=Image.Resampling.LANCZOS)
 
-        color_enhance = ImageEnhance.Color(upscaled)
-        upscaled = color_enhance.enhance(1.2)
+        for _ in range(enhance_passes):
+            color_enhance = ImageEnhance.Color(upscaled)
+            upscaled = color_enhance.enhance(1.2)
 
-        sharpness_enhance = ImageEnhance.Sharpness(upscaled)
-        upscaled = sharpness_enhance.enhance(1.2)
+            sharpness_enhance = ImageEnhance.Sharpness(upscaled)
+            upscaled = sharpness_enhance.enhance(1.2)
 
         upscaled.save(new_name)
 
@@ -585,6 +589,12 @@ def run_scryfall_query(scryfall_query: str) -> list[ScryfallCard]:
     resp = httpx.get(
         "https://api.scryfall.com/cards/search", params=params, timeout=None
     )
+    click.echo(f"Got Response - Status {resp.status_code}")
+    if resp.status_code > 200:
+        # bad resp, quit
+        click.echo(f"Aborting early. Bad Response Status Code -- {resp.status_code}")
+        raise SystemExit
+
     d: ScryfallResponse = resp.json()
 
     click.echo(f"{d['total_cards']} total cards.")
@@ -795,7 +805,7 @@ def generate_backs_pdf():
     for row in range(3):
         x = START_X + 0 * CARD_WIDTH_MM
         for col in range(3):
-            image_path: str = "./card_images/mtg_card_back_upscaled.png"
+            image_path: str = "./card_images/back_upscaled.jpg"
 
             back_x = PAGE_WIDTH_MM - (x + CARD_WIDTH_MM)
             f_back_x = float(back_x)
@@ -820,6 +830,58 @@ def generate_backs_pdf():
 def upscale_card_back(): 
     upscale_image("./card_images/mtg_card_back.png", "./card_images/mtg_card_back_upscaled.png")
 
+@cli.command("upscale_dir")
+def upscale_directory():
+    p = "C:\\Users\\jpete\\Pictures\\mtg\\rose_to_upscale"
+    for f in os.listdir(p):
+        img_path = path.join(p, f)
+        upscale_image(img_path, path.join(p, f"upscaled_{f}"), 2, 5)
+
+
+@cli.command("from_dir")
+def create_pdf_from_dir():
+    p = "C:\\Users\\jpete\\Downloads\\ghosts"
+
+    copies: list[tuple[str, int]] = [
+        ("tygra", 4),
+        ("dutchman", 5)
+    ]
+
+    imgs: list[str] = []
+
+    for f in os.listdir(p):
+        img_path = path.join(p, f)
+        for name, num_copies in copies:
+            if name in img_path:
+                for _ in range(num_copies):
+                    imgs.append(img_path)
+
+
+    pdf_doc = FPDF(orientation="P", unit="mm", format="letter")
+    pdf_doc.set_margin(0)
+    pdf_doc.add_page()
+
+    y = START_Y + Decimal(0) * (CARD_HEIGHT_MM + GAP_MM)
+
+    for row in range(3):
+        x = START_X + Decimal(0) * CARD_WIDTH_MM
+        for col in range(3):
+            image_path: str = imgs.pop()
+
+            print(f"adding image at ({x}, {y})")
+            pdf_doc.image(
+                image_path,
+                x=float(x),
+                y=float(y),
+                w=float(CARD_WIDTH_MM),
+                h=float(CARD_HEIGHT_MM),
+                keep_aspect_ratio=False
+            )
+            x = x + CARD_WIDTH_MM + (GAP_MM if col < 2 else Decimal(0))
+
+        y = y + CARD_HEIGHT_MM + (GAP_MM if row < 2 else Decimal(0))
+
+    pdf_doc.output("./pdfs/custom_ghosts.pdf")
 
 if __name__ == "__main__":
     cli()
