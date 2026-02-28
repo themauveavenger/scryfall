@@ -1,21 +1,18 @@
-import glob
-import json
 import random
-import re
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from io import BytesIO
 from os import makedirs, path
-from pathlib import Path
-from typing import Literal, TypedDict, get_args
+from typing import Literal
 
 import click
-import httpx
 import pyperclip
 from fpdf import FPDF
-from PIL import Image, ImageEnhance
-from requests import get
+
+from scryfall_card import ScryfallCard, BASIC_LANDS
+from oracle_db import OracleDB
+from scryfall import run_scryfall_query
+from image_utils import upscale_image
 
 # Define card dimensions in inches and convert to mm
 # 2.5" x 3.5" cards at 300 PPI = 750 x 1050 pixels
@@ -46,307 +43,6 @@ TOTAL_CARDS_HEIGHT = (Decimal(3) * CARD_HEIGHT_MM) + DOUBLE_GAP_MM
 # add two gaps in both directions
 START_X = (PAGE_WIDTH_MM - TOTAL_CARDS_WIDTH) / Decimal(2)
 START_Y = (PAGE_HEIGHT_MM - TOTAL_CARDS_HEIGHT) / Decimal(2)
-
-type Rarity = Literal["common", "uncommon", "rare", "mythic"]
-
-
-class ScryfallImageUris(TypedDict):
-    png: str
-    large: str
-
-
-class ScryfallCardFace(TypedDict):
-    name: str
-    image_uris: ScryfallImageUris
-
-
-type Legality = Literal["legal", "not_legal"]
-type Format = Literal[
-    "standard",
-    "pioneer",
-    "modern",
-    "alchemy",
-    "future",
-    "historic",
-    "timeless",
-    "commander",
-    "legacy",
-    "oathbreaker",
-]
-type FrameEffect = Literal[
-    "inverted", "legendary", "fullart"
-]  # some effects listed, not all.
-INVERTED_FRAME_EFFECT = "inverted"
-
-FORMAT_CHOICES = get_args(Format.__value__)
-
-BASIC_LANDS: list[str] = ["Island", "Mountain", "Plains", "Swamp", "Forest"]
-
-type SetType = Literal[
-    "token",
-    "core",
-    "expansion",
-    "alchemy",
-    "box",
-    "promo",
-    "funny",
-    "eternal",
-    "masters",
-    "spellbook",
-]
-
-type Layout = Literal[
-    "adventure",
-    "normal",
-    "transform",
-    "omen",
-    "battle",
-    "flip",
-    "modal_dfc",
-    "class",
-    "case",
-    "saga",
-    "token",
-    "prototype",
-    "mutate",
-    "split",
-]
-
-
-class ScryfallCardResponse(TypedDict):
-    name: str
-    printed_name: str
-    id: str
-    oracle_id: str
-    image_uris: ScryfallImageUris
-    set: str  # the 3-4 letter set code
-    set_name: str  # the full set name
-    set_type: SetType
-    rarity: Rarity
-    card_faces: list[ScryfallCardFace]
-    legalities: dict[Format, Legality]
-    released_at: str
-    promo: bool
-    collector_number: str
-    frame_effects: list[FrameEffect]
-    type_line: str
-    layout: Layout
-
-
-class ScryfallResponse(TypedDict):
-    data: list[ScryfallCardResponse]
-    next_page: str
-    total_cards: int
-    has_more: bool
-
-
-def store_upscaled_image(image_url: str, image_path: str):
-    resp = get(image_url)
-
-    with Image.open(BytesIO(resp.content)) as img:
-        new_size = (img.width * 4, img.height * 4)
-
-        upscaled = img.resize(new_size, resample=Image.Resampling.LANCZOS)
-
-        color_enhance = ImageEnhance.Color(upscaled)
-        upscaled = color_enhance.enhance(1.2)
-
-        sharpness_enhance = ImageEnhance.Sharpness(upscaled)
-        upscaled = sharpness_enhance.enhance(1.2)
-
-        upscaled.save(image_path)
-
-def upscale_image(image_path: str, new_name: str):
-    with Image.open(image_path) as img:
-        new_size = (img.width * 4, img.height * 4)
-
-        upscaled = img.resize(new_size, resample=Image.Resampling.LANCZOS)
-
-        color_enhance = ImageEnhance.Color(upscaled)
-        upscaled = color_enhance.enhance(1.2)
-
-        sharpness_enhance = ImageEnhance.Sharpness(upscaled)
-        upscaled = sharpness_enhance.enhance(1.2)
-
-        upscaled.save(new_name)
-
-
-class ScryfallCard:
-    def __init__(self, card_data: ScryfallCardResponse):
-        self.card_data = card_data
-
-    def id(self) -> str:
-        return self.card_data.get("id")
-
-    def name(self) -> str:
-        printed_name = self.card_data.get("printed_name")
-        if printed_name is not None:
-            return printed_name
-        return self.card_data.get("name")
-
-    def rarity(self) -> Rarity:
-        return self.card_data["rarity"]
-
-    def set(self) -> str:
-        return str.upper(self.card_data.get("set"))
-
-    def is_transform(self) -> bool:
-        """This card has multiple card faces and transforms. All card faces should be added to PDF"""
-        card_layout: Layout = self.card_data.get("layout", "")
-        return card_layout in ["transform", "modal_dfc", "reversible_card"]
-
-    def card_face_uris(self) -> list[str] | None:
-        faces = self.card_data.get("card_faces")
-        if faces is not None and len(faces) > 0:
-            return [face["image_uris"]["png"] for face in faces]
-        return None
-
-    def card_data_path(self) -> str:
-        return f"./data_sets/card_data/{self.set()}/{self.id()}.json"
-
-    def card_image_path(self) -> str:
-        return f"./card_images/{self.set()}/{self.id()}.png"
-
-    def image_file_exists(self) -> bool:
-        return path.exists(self.card_image_path())
-
-    def image(self) -> str:
-        """the png image url on scryfall"""
-        return self.card_data["image_uris"]["png"]
-
-    def faces_directory(self) -> str:
-        return path.join(".", "card_images", self.set(), self.id())
-
-    def faces_image_files(self) -> list[str]:
-        return glob.glob(self.faces_directory() + "/*.png")
-
-    def store_card_faces(self):
-        # make a directory with the id number, store all card faces in there.
-        if not path.exists(self.faces_directory()):
-            makedirs(self.faces_directory(), exist_ok=True)
-        else:
-            click.echo(f"Images already exist for {self.name()}")
-            return
-
-        uris = self.card_face_uris()
-        if uris is not None and len(uris) > 0:
-            count = 1
-
-            for card_face_uri in uris:
-                click.echo(f"fetching new image {self.name()} - {self.id()}")
-                save_path = path.join(self.faces_directory(), f"face_{count}.png")
-                store_upscaled_image(card_face_uri, save_path)
-                count = count + 1
-
-    def store_image_from_web(self):
-        if not self.image_file_exists():
-            # make the directories first
-            p = Path(self.card_image_path())
-            p.parent.mkdir(exist_ok=True, parents=True)
-
-            # fetch next
-            print(f"Fetching new image {self.name()} - {self.id()}")
-
-            store_upscaled_image(self.image(), self.card_image_path())
-        else:
-            print(f"Image already exists for {self.name()} - {self.id()}")
-
-    def store_image(self):
-        if self.is_transform():
-            self.store_card_faces()
-        else:
-            self.store_image_from_web()
-
-    def release_date(self) -> datetime:
-        return datetime.fromisoformat(self.card_data["released_at"])
-
-    def collector_number(self) -> str:
-        return self.card_data["collector_number"]
-
-
-def extract_set_code(card_name: str) -> tuple[str | None, str]:
-    """
-    extracts the set code, if it exists, from the card_name.
-    returns the set_code, if it was found, and the card name with set code removed.
-    """
-    # see if the card_name contains a set
-    set_code_match = re.search("\\(\\w{3,4}\\)", card_name)
-    set_code = None
-    if set_code_match is not None:
-        set_code = set_code_match[0]
-        card_name = re.sub("\\(\\w{3,4}\\)", "", card_name).strip()
-
-    # remove parentheses
-    if set_code is not None:
-        set_code = set_code.replace("(", "").strip()
-        set_code = set_code.replace(")", "").strip()
-
-    return set_code, card_name
-
-
-def extract_collector_number(card_name: str) -> tuple[str | None, str]:
-    """
-    extracts the colletor number, if it exists, from the card name.
-    returns the collector number,  if it was found, and the card name with the number removed.
-    """
-    collector_number_match = re.search("\\d+$", card_name)
-    cn = None
-
-    if collector_number_match is not None:
-        cn = collector_number_match[0]
-        card_name = re.sub("\\d+$", "", card_name).strip()
-
-    return cn, card_name
-
-
-class OracleDB:
-    def __init__(self, data_set_path="./data_sets/default-cards-20260215221934.json"):
-        click.echo(f"Opening Oracle Card DB at {data_set_path}")
-
-        with open(data_set_path, encoding="utf-8") as json_file:
-            json_data = json.load(json_file)
-            self.data: list[ScryfallCardResponse] = json_data
-
-    def get_set_cards(self, set_code: str) -> list[ScryfallCard]:
-        set_code_search_value = set_code.upper()
-        return [
-            ScryfallCard(c)
-            for c in self.data
-            if c["set"].upper() == set_code_search_value
-        ]
-
-    def find_card(self, card_name: str) -> ScryfallCard | None:
-        cn, card_name = extract_collector_number(card_name)
-
-        set_code, card_name = extract_set_code(card_name)
-
-        matched_card_names = (
-            c
-            for c in self.data
-            if card_name in c.get("printed_name", "") or card_name in c.get("name", "")
-        )
-
-        # check for set code
-        if set_code is not None:
-            set_code = set_code.lower()
-            matches_set = (
-                c for c in matched_card_names if c["set"].lower() == set_code
-            )
-        else:
-            matches_set = matched_card_names
-
-        # check for collector number
-        if cn is not None:
-            matches_cn = (c for c in matches_set if c["collector_number"] == cn)
-        else:
-            matches_cn = matches_set
-
-        results = list(ScryfallCard(c) for c in matches_cn)
-
-        if results is None or len(results) == 0:
-            return None
-
-        return max(results, key=lambda c: c.release_date())
 
 
 @dataclass
@@ -397,14 +93,6 @@ def write_pdf_file(pdf_doc: FPDF, directory: str, deck_or_list_name: str):
     full_path = path.join(pdf_directory, filename)
     click.echo(f"Writing file: {full_path}")
     pdf_doc.output(full_path)
-
-
-def swap_first_third(lst: list[str]) -> list[str]:
-    for i in range(0, len(lst), 3):
-        print(lst)
-        print("**************")
-        lst[i], lst[i + 2] = lst[i + 2], lst[i]
-    return lst
 
 
 def generate_transforms_pdf(cards: list[CardPrintInstructions], deck_name: str):
@@ -566,7 +254,10 @@ def generate_pdf(
 
 
 def generate_booster_list(card_set: list[ScryfallCard]) -> list[ScryfallCard]:
-    # 5 common, 3 uncommon, 1 rare/mythic
+    """
+    Creates a list of 9 cards for a "booster pack" of magic ards from a single set.
+    5 common, 3 uncommon, 1 rare/mythic
+    """
     booster_cards: list[ScryfallCard] = []
     common_pool = [c for c in card_set if c.rarity() == "common"]
     [booster_cards.append(random.choice(common_pool)) for _ in range(5)]
@@ -578,25 +269,6 @@ def generate_booster_list(card_set: list[ScryfallCard]) -> list[ScryfallCard]:
     booster_cards.append(random.choice(rare_mythic_pool))
 
     return booster_cards
-
-
-def run_scryfall_query(scryfall_query: str) -> list[ScryfallCard]:
-    params = {"q": scryfall_query}
-    resp = httpx.get(
-        "https://api.scryfall.com/cards/search", params=params, timeout=None
-    )
-    d: ScryfallResponse = resp.json()
-
-    click.echo(f"{d['total_cards']} total cards.")
-
-    cards: list[ScryfallCard] = [ScryfallCard(c) for c in d["data"]]
-    while d["has_more"]:
-        resp = httpx.get(d["next_page"], timeout=None)
-        d: ScryfallResponse = resp.json()
-        for c in d["data"]:
-            cards.append(ScryfallCard(c))
-
-    return cards
 
 
 def generate_card_print_instructions(data: str) -> list[CardPrintInstructions]:
