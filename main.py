@@ -451,7 +451,7 @@ def add_card_backs_page(pdf_doc: FPDF):
             print(f"adding back image at ({f_back_x}, {y})")
             pdf_doc.image(
                 image_path,
-                x=float(f_back_x),
+                x=f_back_x,
                 y=float(y),
                 w=float(CARD_WIDTH_MM),
                 h=float(CARD_HEIGHT_MM),
@@ -475,7 +475,7 @@ def upscale_directory():
     p = "C:\\Users\\jpete\\Pictures\\mtg\\rose_to_upscale"
     for f in os.listdir(p):
         img_path = path.join(p, f)
-        upscale_image(img_path, path.join(p, f"upscaled_{f}"), 2, 5)
+        upscale_image(img_path, path.join(p, f"upscaled_{f}"), 2)
 
 
 @cli.command("from_dir")

@@ -18,9 +18,9 @@ def store_upscaled_image(image_url: str, image_path: str):
 
         upscaled.save(image_path)
 
-def upscale_image(image_path: str, new_name: str):
+def upscale_image(image_path: str, new_name: str, size_multiplier = 4):
     with Image.open(image_path) as img:
-        new_size = (img.width * 4, img.height * 4)
+        new_size = (img.width * size_multiplier, img.height * size_multiplier)
 
         upscaled = img.resize(new_size, resample=Image.Resampling.LANCZOS)
 
