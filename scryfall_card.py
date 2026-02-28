@@ -1,11 +1,12 @@
 import glob
 import click
+import httpx
 from os import path, makedirs
 from pathlib import Path
 from datetime import datetime
 
 from image_utils import store_upscaled_image
-from scryfall import ScryfallCardResponse, Layout, Rarity
+from scryfall import ScryfallCardResponse, ScryfallResponse, Layout, Rarity
 
 class ScryfallCard:
     def __init__(self, card_data: ScryfallCardResponse):
@@ -98,3 +99,22 @@ class ScryfallCard:
 
     def collector_number(self) -> str:
         return self.card_data["collector_number"]
+
+
+def run_scryfall_query(scryfall_query: str) -> list[ScryfallCard]:
+    params = {"q": scryfall_query}
+    resp = httpx.get(
+        "https://api.scryfall.com/cards/search", params=params, timeout=None
+    )
+    d: ScryfallResponse = resp.json()
+
+    click.echo(f"{d['total_cards']} total cards.")
+
+    cards: list[ScryfallCard] = [ScryfallCard(c) for c in d["data"]]
+    while d["has_more"]:
+        resp = httpx.get(d["next_page"], timeout=None)
+        d: ScryfallResponse = resp.json()
+        for c in d["data"]:
+            cards.append(ScryfallCard(c))
+
+    return cards

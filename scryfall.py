@@ -1,8 +1,4 @@
 from typing import Literal, TypedDict, get_args
-import click
-import httpx
-
-from scryfall_card import ScryfallCard
 
 type Rarity = Literal["common", "uncommon", "rare", "mythic"]
 
@@ -97,22 +93,3 @@ class ScryfallResponse(TypedDict):
     next_page: str
     total_cards: int
     has_more: bool
-
-
-def run_scryfall_query(scryfall_query: str) -> list[ScryfallCard]:
-    params = {"q": scryfall_query}
-    resp = httpx.get(
-        "https://api.scryfall.com/cards/search", params=params, timeout=None
-    )
-    d: ScryfallResponse = resp.json()
-
-    click.echo(f"{d['total_cards']} total cards.")
-
-    cards: list[ScryfallCard] = [ScryfallCard(c) for c in d["data"]]
-    while d["has_more"]:
-        resp = httpx.get(d["next_page"], timeout=None)
-        d: ScryfallResponse = resp.json()
-        for c in d["data"]:
-            cards.append(ScryfallCard(c))
-
-    return cards

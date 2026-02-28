@@ -1,9 +1,10 @@
-import re 
-import click 
+import re
+import click
 import json
 
 from scryfall import ScryfallCardResponse
 from scryfall_card import ScryfallCard
+
 
 def extract_set_code(card_name: str) -> tuple[str | None, str]:
     """
@@ -41,6 +42,10 @@ def extract_collector_number(card_name: str) -> tuple[str | None, str]:
 
 
 class OracleDB:
+    """
+    Class that encapsulates a json file from scryfall's bulk download section.
+    """
+
     def __init__(self, data_set_path="./data_sets/default-cards-20260221100742.json"):
         click.echo(f"Opening Oracle Card DB at {data_set_path}")
 

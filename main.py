@@ -9,9 +9,9 @@ import click
 import pyperclip
 from fpdf import FPDF
 
-from scryfall_card import ScryfallCard, BASIC_LANDS
+from scryfall import BASIC_LANDS
+from scryfall_card import run_scryfall_query, ScryfallCard
 from oracle_db import OracleDB
-from scryfall import run_scryfall_query
 from image_utils import upscale_image
 
 # Define card dimensions in inches and convert to mm
@@ -43,6 +43,8 @@ TOTAL_CARDS_HEIGHT = (Decimal(3) * CARD_HEIGHT_MM) + DOUBLE_GAP_MM
 # add two gaps in both directions
 START_X = (PAGE_WIDTH_MM - TOTAL_CARDS_WIDTH) / Decimal(2)
 START_Y = (PAGE_HEIGHT_MM - TOTAL_CARDS_HEIGHT) / Decimal(2)
+
+ZERO_DECIMAL = Decimal(0)
 
 
 @dataclass
@@ -174,8 +176,7 @@ def generate_deck_list_pdf(cards: list[CardPrintInstructions], deck_name: str):
     while image_paths:
         pdf_doc.add_page()
 
-        # start y up here. it only resets when there is a new
-        # page
+        # start y up here. it goes back to the start position on new pages.
         y = START_Y + 0 * CARD_HEIGHT_MM
 
         # Add 3x3 grid of images
@@ -475,7 +476,7 @@ def generate_backs_pdf():
             print(f"adding back image at ({f_back_x}, {y})")
             pdf_doc.image(
                 image_path,
-                x=float(f_back_x),
+                x=back_x,
                 y=float(y),
                 w=float(CARD_WIDTH_MM),
                 h=float(CARD_HEIGHT_MM),
