@@ -20,11 +20,13 @@ from image_utils import upscale_image
 CARD_WIDTH_IN = Decimal("2.5")
 CARD_HEIGHT_IN = Decimal("3.5")
 
-ONE_INCH_MM = Decimal("25.4") # 1 inch to mm conversion.
+ONE_INCH_MM = Decimal("25.4")  # 1 inch to mm conversion.
 
 # Convert inches to mm (1 inch = 25.4 mm)
-CARD_WIDTH_MM = CARD_WIDTH_IN * ONE_INCH_MM # Decimal("63.5")  # CARD_WIDTH_IN * 25.4
-CARD_HEIGHT_MM = CARD_HEIGHT_IN * ONE_INCH_MM # Decimal("88.9")  # CARD_HEIGHT_IN * 25.4
+CARD_WIDTH_MM = CARD_WIDTH_IN * ONE_INCH_MM  # Decimal("63.5")  # CARD_WIDTH_IN * 25.4
+CARD_HEIGHT_MM = (
+    CARD_HEIGHT_IN * ONE_INCH_MM
+)  # Decimal("88.9")  # CARD_HEIGHT_IN * 25.4
 
 # Gap between cards
 GAP_MM = Decimal("0.2")
@@ -51,37 +53,6 @@ ZERO_DECIMAL = Decimal(0)
 class CardPrintInstructions:
     num_copies: int
     card: ScryfallCard
-
-
-@dataclass
-class PDFImageLocation:
-    x: Decimal
-    y: Decimal
-
-
-IMAGE_PAGE_LOCATIONS_FRONTS = [
-    PDFImageLocation(Decimal("12.5"), Decimal("6.15")),
-    PDFImageLocation(Decimal("76.2"), Decimal("6.15")),
-    PDFImageLocation(Decimal("139.7"), Decimal("6.15")),
-    PDFImageLocation(Decimal("12.5"), Decimal("95.25")),
-    PDFImageLocation(Decimal("76.2"), Decimal("95.25")),
-    PDFImageLocation(Decimal("139.7"), Decimal("95.25")),
-    PDFImageLocation(Decimal("12.5"), Decimal("184.15")),
-    PDFImageLocation(Decimal("76.2"), Decimal("184.15")),
-    PDFImageLocation(Decimal("139.7"), Decimal("184.15")),
-]
-
-IMAGE_PAGE_LOCATIONS_BACKS = [
-    PDFImageLocation(Decimal("139.7"), Decimal("6.15")),
-    PDFImageLocation(Decimal("76.2"), Decimal("6.15")),
-    PDFImageLocation(Decimal("12.5"), Decimal("6.15")),
-    PDFImageLocation(Decimal("139.7"), Decimal("95.25")),
-    PDFImageLocation(Decimal("76.2"), Decimal("95.25")),
-    PDFImageLocation(Decimal("12.5"), Decimal("95.25")),
-    PDFImageLocation(Decimal("139.7"), Decimal("184.15")),
-    PDFImageLocation(Decimal("76.2"), Decimal("184.15")),
-    PDFImageLocation(Decimal("12.5"), Decimal("184.15")),
-]
 
 
 PDF_BASE_DIR = "pdfs"
@@ -115,11 +86,11 @@ def generate_transforms_pdf(cards: list[CardPrintInstructions], deck_name: str):
 
         # start y up here. it only resets when there is a new
         # page
-        y = START_Y + 0 * CARD_HEIGHT_MM
+        y = START_Y + ZERO_DECIMAL * CARD_HEIGHT_MM
 
         for row in range(3):
             # start x - it resets back to the left on each row
-            x = START_X + 0 * CARD_WIDTH_MM
+            x = START_X + ZERO_DECIMAL * CARD_WIDTH_MM
 
             for col in range(3):
                 front_path, back_path = paths.pop()
@@ -177,11 +148,11 @@ def generate_deck_list_pdf(cards: list[CardPrintInstructions], deck_name: str):
         pdf_doc.add_page()
 
         # start y up here. it goes back to the start position on new pages.
-        y = START_Y + 0 * CARD_HEIGHT_MM
+        y = START_Y + ZERO_DECIMAL * CARD_HEIGHT_MM
 
         # Add 3x3 grid of images
         for row in range(3):
-            x = START_X + 0 * CARD_WIDTH_MM
+            x = START_X + ZERO_DECIMAL * CARD_WIDTH_MM
 
             for col in range(3):
                 if len(image_paths) == 0:
@@ -338,6 +309,10 @@ def booster(set_code: str):
 
 
 def cards_to_add(num_cards: int, cards_per_page=9) -> int:
+    """
+    determines the number of extra cards to add to completely fill out a single
+    sheet of 9 cards.
+    """
     remainder = num_cards % cards_per_page
     if remainder == 0:
         return 0
@@ -480,7 +455,7 @@ def generate_backs_pdf():
                 y=float(y),
                 w=float(CARD_WIDTH_MM),
                 h=float(CARD_HEIGHT_MM),
-                keep_aspect_ratio=False
+                keep_aspect_ratio=False,
             )
             x = x + CARD_WIDTH_MM + (GAP_MM if col < 2 else Decimal(0))
 
@@ -490,8 +465,10 @@ def generate_backs_pdf():
 
 
 @cli.command("upscale_card_back")
-def upscale_card_back(): 
-    upscale_image("./card_images/mtg_card_back.png", "./card_images/mtg_card_back_upscaled.png")
+def upscale_card_back():
+    upscale_image(
+        "./card_images/mtg_card_back.png", "./card_images/mtg_card_back_upscaled.png"
+    )
 
 
 if __name__ == "__main__":
