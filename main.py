@@ -176,6 +176,8 @@ def generate_deck_list_pdf(cards: list[CardPrintInstructions], deck_name: str):
             # increment y, this is the row
             y = y + CARD_HEIGHT_MM + (GAP_MM if row < 2 else Decimal(0))
 
+    add_card_backs_page(pdf_doc)
+
     write_pdf_file(pdf_doc, "decks", deck_name)
 
 
@@ -429,19 +431,16 @@ def debug_stuff():
         print("not found")
 
 
-@cli.command("generate_backs")
-def generate_backs_pdf():
-    pdf_doc = FPDF(orientation="P", unit="mm", format="letter")
-    pdf_doc.set_margin(0)
+def add_card_backs_page(pdf_doc: FPDF):
     pdf_doc.add_page()
 
-    y = START_Y + 0 * (CARD_HEIGHT_MM + GAP_MM)
+    y = START_Y + ZERO_DECIMAL * (CARD_HEIGHT_MM + GAP_MM)
 
     print(f"effective width & height {pdf_doc.epw}, {pdf_doc.eph}")
     print(f"hard-coded width & height {PAGE_WIDTH_MM}, {PAGE_HEIGHT_MM}")
 
     for row in range(3):
-        x = START_X + 0 * CARD_WIDTH_MM
+        x = START_X + ZERO_DECIMAL * CARD_WIDTH_MM
         for col in range(3):
             image_path: str = "./card_images/mtg_card_back_upscaled.png"
 
@@ -451,7 +450,7 @@ def generate_backs_pdf():
             print(f"adding back image at ({f_back_x}, {y})")
             pdf_doc.image(
                 image_path,
-                x=back_x,
+                x=f_back_x,
                 y=float(y),
                 w=float(CARD_WIDTH_MM),
                 h=float(CARD_HEIGHT_MM),
@@ -460,6 +459,13 @@ def generate_backs_pdf():
             x = x + CARD_WIDTH_MM + (GAP_MM if col < 2 else Decimal(0))
 
         y = y + CARD_HEIGHT_MM + (GAP_MM if row < 2 else Decimal(0))
+
+
+@cli.command("generate_backs")
+def generate_backs_pdf():
+    pdf_doc = FPDF(orientation="P", unit="mm", format="letter")
+    pdf_doc.set_margin(0)
+    add_card_backs_page(pdf_doc)
 
     pdf_doc.output("./pdfs/card_backs.pdf")
 
