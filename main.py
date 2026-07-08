@@ -464,6 +464,49 @@ def add_card_backs_page(pdf_doc: FPDF):
     pdf_doc.output("./pdfs/card_backs.pdf")
 
 
+@cli.command("backs", short_help="Generates a single-page PDF of 9 card backs with an x offset.")
+@click.option(
+    "-x",
+    "--x-offset",
+    "x_offset",
+    type=float,
+    default=0.0,
+    help="x offset in millimeters applied to each row of backs. Positive shifts left (mirrored).",
+)
+def backs(x_offset: float):
+    pdf_doc = FPDF(orientation="P", unit="mm", format="letter")
+    pdf_doc.set_margin(0)
+    pdf_doc.add_page()
+
+    image_path = "/home/josh/Code/python/scryfall/card_images/mtg_card_back_enhanced_4.png"
+
+    offset = Decimal(str(x_offset))
+
+    y = START_Y
+    for row in range(3):
+        x = START_X + offset
+        for col in range(3):
+            back_x = PAGE_WIDTH_MM - (x + CARD_WIDTH_MM)
+            f_back_x = float(back_x)
+
+            print(f"adding back image at ({f_back_x}, {y})")
+            pdf_doc.image(
+                image_path,
+                x=f_back_x,
+                y=float(y),
+                w=float(CARD_WIDTH_MM),
+                h=float(CARD_HEIGHT_MM),
+                keep_aspect_ratio=False,
+            )
+            x = x + CARD_WIDTH_MM + (GAP_MM if col < 2 else Decimal(0))
+
+        y = y + CARD_HEIGHT_MM + (GAP_MM if row < 2 else Decimal(0))
+
+    filename = f"card_backs-{int(datetime.now().timestamp())}.pdf"
+    pdf_doc.output(f"./pdfs/{filename}")
+    click.echo(f"Wrote ./pdfs/{filename}")
+
+
 @cli.command("upscale_card_back")
 def upscale_card_back():
     upscale_image(
