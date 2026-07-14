@@ -461,8 +461,6 @@ def add_card_backs_page(pdf_doc: FPDF):
 
         y = y + CARD_HEIGHT_MM + (GAP_MM if row < 2 else Decimal(0))
 
-    pdf_doc.output("./pdfs/card_backs.pdf")
-
 
 @cli.command("upscale_card_back")
 def upscale_card_back():
@@ -522,6 +520,75 @@ def create_pdf_from_dir():
         y = y + CARD_HEIGHT_MM + (GAP_MM if row < 2 else Decimal(0))
 
     pdf_doc.output("./pdfs/custom_ghosts.pdf")
+
+def generate_custom_cards_pdf(image_paths: list[str], deck_name: str):
+    pdf_doc = FPDF(orientation="P", unit="mm", format="letter")
+    pdf_doc.set_margin(0)
+
+    while image_paths:
+        pdf_doc.add_page()
+        y = START_Y + ZERO_DECIMAL * CARD_HEIGHT_MM
+
+        for row in range(3):
+            x = START_X + ZERO_DECIMAL * CARD_WIDTH_MM
+            for col in range(3):
+                if len(image_paths) == 0:
+                    break
+
+                img_path = image_paths.pop()
+                pdf_doc.image(
+                    img_path,
+                    x=float(x),
+                    y=float(y),
+                    w=float(CARD_WIDTH_MM),
+                    h=float(CARD_HEIGHT_MM),
+                    keep_aspect_ratio=False,
+                )
+                x = x + CARD_WIDTH_MM + (GAP_MM if col < 2 else Decimal(0))
+
+            if len(image_paths) == 0:
+                break
+            y = y + CARD_HEIGHT_MM + (GAP_MM if row < 2 else Decimal(0))
+
+    write_pdf_file(pdf_doc, "custom", deck_name)
+
+
+@cli.command("custom_cards", short_help="Generates a PDF from custom PNG card images in a directory.")
+@click.option("-d", "--dir", default="~/Downloads/to_print", type=str, help="Directory containing custom card PNGs.")
+@click.option("-n", "--name", default="custom_cards", type=str, help="Name for the output PDF.")
+@click.option("-c", "--copies", default=3, type=int, help="Number of copies per card.")
+def custom_cards(dir: str, name: str, copies: int):
+    dir_path = path.expanduser(dir)
+    if not path.exists(dir_path):
+        click.echo(f"Directory not found: {dir_path}")
+        return
+
+    image_paths = sorted([
+        path.join(dir_path, f)
+        for f in os.listdir(dir_path)
+        if f.lower().endswith(".png")
+    ])
+
+    if not image_paths:
+        click.echo(f"No PNG images found in {dir_path}")
+        return
+
+    click.echo(f"Found {len(image_paths)} cards. Printing {copies} copies each.")
+
+    all_paths: list[str] = []
+    for img_path in image_paths:
+        for _ in range(copies):
+            all_paths.append(img_path)
+
+    total_cards = len(all_paths)
+    copies_to_add = cards_to_add(total_cards, 9)
+    if copies_to_add:
+        click.echo(f"Adding {copies_to_add} duplicate(s) to fill the last page.")
+        for _ in range(copies_to_add):
+            all_paths.append(random.choice(all_paths))
+
+    generate_custom_cards_pdf(all_paths, name)
+
 
 if __name__ == "__main__":
     cli()
